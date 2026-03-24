@@ -1,198 +1,193 @@
 import os
-import pickle
+import uuid
 import numpy as np
-
-from sentence_transformers import CrossEncoder
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
-
+from langchain_community.document_loaders import PyPDFLoader, TextLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from sentence_transformers import CrossEncoder
 from rank_bm25 import BM25Okapi
 import ollama
 
 from .config import *
-
+from .history_aware import get_standalone_query, generate_multi_queries
 
 class RAGService:
     def __init__(self):
-        # ✅ FIX: Use LangChain embedding wrapper (NOT SentenceTransformer)
-        self.embed_model = HuggingFaceEmbeddings(
-            model_name=EMBEDDING_MODEL
-        )
-
+        self.embed_model = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
         self.rerank_model = CrossEncoder(RERANK_MODEL)
-
         self.vector_store = None
-        self.bm25_index = None
-        self.corpus_tokens = []
-        self.doc_metadata = []
+        # In-memory storage for session-specific BM25 and metadata
+        self.sessions = {} 
 
-        self.bm25_path = os.path.join(DATA_INDEX, "bm25_index.pkl")
-
-        self.load_index()
-
-    def load_index(self):
-        if os.path.exists(DATA_INDEX) and os.path.exists(self.bm25_path):
-            try:
-                self.vector_store = FAISS.load_local(
-                    DATA_INDEX,
-                    self.embed_model,
-                    allow_dangerous_deserialization=True
-                )
-
-                with open(self.bm25_path, "rb") as f:
-                    bm25_data = pickle.load(f)
-                    self.corpus_tokens = bm25_data["corpus"]
-                    self.doc_metadata = bm25_data["metadata"]
-
-                self.bm25_index = BM25Okapi(self.corpus_tokens)
-                print("Index loaded successfully.")
-
-            except Exception as e:
-                print(f"Error loading index: {e}")
-                self.vector_store = None
-        else:
-            print("⚠️ No index found. Please run indexer.py first.")
-
-    def save_index(self):
-        if self.vector_store:
-            self.vector_store.save_local(DATA_INDEX)
-
-            with open(self.bm25_path, "wb") as f:
-                pickle.dump(
-                    {
-                        "corpus": self.corpus_tokens,
-                        "metadata": self.doc_metadata
-                    },
-                    f
-                )
-
-    def ingest_file(self, file_path: str):
-        # ✅ FIX: Encoding for txt
-        if file_path.endswith('.txt'):
-            loader = TextLoader(file_path, encoding="utf-8")
-        else:
-            loader = PyPDFLoader(file_path)
-
-        docs = loader.load()
-
-        # ✅ FIX: Use Recursive splitter
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=CHUNK_SIZE,
-            chunk_overlap=CHUNK_OVERLAP
-        )
-
-        chunks = splitter.split_documents(docs)
-
+    def ingest_file(self, file_path: str, session_id: str):
+        loader = TextLoader(file_path, encoding="utf-8") if file_path.endswith('.txt') else PyPDFLoader(file_path)
+        chunks = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP).split_documents(loader.load())
+        
         texts = [c.page_content.replace("\n", " ").strip() for c in chunks]
+        metas = [{"source": os.path.basename(file_path), "session_id": session_id} for _ in texts]
 
-        metas = [
-            {"source": os.path.basename(file_path), "chunk_id": i}
-            for i in range(len(chunks))
-        ]
-
-        # ✅ FIX: FAISS API
-        if self.vector_store:
-            self.vector_store.add_texts(texts, metadatas=metas)
+        # Add to FAISS (Persistent/Global but filtered by session_id)
+        if self.vector_store is None:
+            self.vector_store = FAISS.from_texts(texts, self.embed_model, metadatas=metas)
         else:
-            self.vector_store = FAISS.from_texts(
-                texts,
-                self.embed_model,
-                metadatas=metas
-            )
+            self.vector_store.add_texts(texts, metadatas=metas)
 
-        # BM25 update
-        new_tokens = [text.split() for text in texts]
-        self.corpus_tokens.extend(new_tokens)
-        self.doc_metadata.extend(metas)
-        self.bm25_index = BM25Okapi(self.corpus_tokens)
-
-        self.save_index()
+        # Update Session-specific BM25
+        if session_id not in self.sessions:
+            self.sessions[session_id] = {"tokens": [], "metas": []}
+        
+        new_tokens = [t.split() for t in texts]
+        self.sessions[session_id]["tokens"].extend(new_tokens)
+        self.sessions[session_id]["metas"].extend(metas)
+        self.sessions[session_id]["bm25"] = BM25Okapi(self.sessions[session_id]["tokens"])
+        
         return len(chunks)
 
-    def hybrid_search(self, query: str):
-        vec_docs = self.vector_store.similarity_search(query, k=TOP_N_INITIAL)
+    # def hybrid_retrieval(self, query: str, session_id: str):
+    #     # 1. Vector Search (Filtered by session)
+    #     vec_results = self.vector_store.similarity_search(
+    #         query, k=TOP_N_INITIAL, filter={"session_id": session_id}
+    #     )
+        
+    #     # 2. BM25 Search
+    #     session_data = self.sessions.get(session_id)
+    #     if not session_data or "bm25" not in session_data:
+    #         return vec_results
 
-        query_tokens = query.split()
-        bm25_scores = self.bm25_index.get_scores(query_tokens)
+    #     scores = session_data["bm25"].get_scores(query.split())
+    #     if np.max(scores) == 0 and not vec_results:
+    #         return []
+    #     top_indices = np.argsort(scores)[-TOP_N_INITIAL:][::-1]
+    #     bm25_results = []
+    #     for idx in top_indices:
+    #         if session_data["metas"][idx]["session_id"] == session_id:
+    #             bm25_results.append(type('obj', (object,), {
+    #                 'page_content': " ".join(session_data["tokens"][idx]),
+    #                 'metadata': session_data["metas"][idx]
+    #             }))
+        
+    #     # 3. Manual Weighted Ensemble (Simple version of LangChain Ensemble)
+    #     # For simplicity in this logic, we combine and deduplicate
+    #     combined = {res.page_content: res for res in (vec_results + bm25_results)}
+    #     return list(combined.values())
+    def hybrid_retrieval(self, query: str, session_id: str):
+    # 1. Vector search with scores
+        vec_results = self.vector_store.similarity_search_with_score(
+            query, k=TOP_N_INITIAL, filter={"session_id": session_id}
+        )
 
-        top_indices = np.argsort(bm25_scores)[-TOP_N_INITIAL:][::-1]
-
-        bm25_docs = []
-        for idx in top_indices:
-            if idx < len(self.corpus_tokens):
-                content = " ".join(self.corpus_tokens[idx])
-
-                bm25_docs.append(
-                    type('obj', (object,), {
-                        'page_content': content,
-                        'metadata': self.doc_metadata[idx]
-                    })
-                )
-
-        return vec_docs, bm25_docs
-
-    def rerank_chunks(self, query: str, chunks):
-        if not chunks:
-            return []
-
-        pairs = [[query, c.page_content] for c in chunks]
-
-        try:
-            scores = self.rerank_model.predict(pairs)
-            ranked = sorted(zip(chunks, scores), key=lambda x: x[1], reverse=True)
-            return [c[0] for c in ranked[:TOP_K_FINAL]]
-        except:
-            return chunks[:TOP_K_FINAL]
-
-    def generate_answer(self, query: str, context: str, history: list):
-        system_prompt = """You are a construction assistant.
-Answer ONLY from the provided context.
-If not found, say: "I don't have information in the provided documents."
-"""
-
-        messages = [{'role': 'system', 'content': system_prompt}]
-        messages.extend(history)
-
-        messages.append({
-            'role': 'user',
-            'content': f"Context:\n{context}\n\nQuestion: {query}"
-        })
-
-        try:
-            response = ollama.chat(
-                model=OLLAMA_MODEL,
-                messages=messages
-            )
-            return response['message']['content']
-
-        except Exception as e:
-            return f"LLM Error: {str(e)}"
-
-    def process_query(self, query: str, history: list):
-        if not self.vector_store or not self.bm25_index:
-            return None, [], True
-
-        vec_docs, bm25_docs = self.hybrid_search(query)
-
-        candidates = vec_docs + bm25_docs
-
-        final_chunks = self.rerank_chunks(query, candidates)
-
-        context = "\n\n".join([c.page_content for c in final_chunks])
-
-        sources = [
-            {
-                "text": c.page_content,
-                "source": c.metadata.get("source", "unknown")
+        # Normalize vector scores (convert distance → similarity if needed)
+        vec_dict = {}
+        for doc, score in vec_results:
+            vec_dict[doc.page_content] = {
+                "doc": doc,
+                "vec_score": 1 / (1 + score)  # simple normalization
             }
-            for c in final_chunks
-        ]
 
-        answer = self.generate_answer(query, context, history)
+        # 2. BM25 search
+        session_data = self.sessions.get(session_id)
+        if not session_data or "bm25" not in session_data:
+            return [v["doc"] for v in vec_dict.values()]
 
+        scores = session_data["bm25"].get_scores(query.split())
+
+        bm25_dict = {}
+        for idx, score in enumerate(scores):
+            if session_data["metas"][idx]["session_id"] == session_id:
+                content = " ".join(session_data["tokens"][idx])
+                bm25_dict[content] = score
+
+        # Normalize BM25 scores
+        max_bm25 = max(bm25_dict.values()) if bm25_dict else 1
+        for k in bm25_dict:
+            bm25_dict[k] /= max_bm25
+
+        # 3. Combine with weights
+        final_results = {}
+
+        all_keys = set(vec_dict.keys()) | set(bm25_dict.keys())
+
+        for key in all_keys:
+            vec_score = vec_dict.get(key, {}).get("vec_score", 0)
+            bm25_score = bm25_dict.get(key, 0)
+
+            final_score = 0.7 * vec_score + 0.3 * bm25_score
+
+            doc = vec_dict.get(key, {}).get("doc") or type('obj', (object,), {
+                'page_content': key,
+                'metadata': {}
+            })
+
+            final_results[key] = (doc, final_score)
+
+        # 4. Sort by final score
+        ranked = sorted(final_results.values(), key=lambda x: x[1], reverse=True)
+
+        return [doc for doc, _ in ranked[:TOP_N_INITIAL]]
+
+    def rrf_merge(self, query_results_list):
+        # Reciprocal Rank Fusion
+        fused_scores = {}
+        k = 60 # Standard constant for RRF
+        for results in query_results_list:
+            for rank, doc in enumerate(results):
+                content = doc.page_content
+                if content not in fused_scores:
+                    fused_scores[content] = [doc, 0]
+                fused_scores[content][1] += 1 / (rank + k)
+        
+        reranked = sorted(fused_scores.values(), key=lambda x: x[1], reverse=True)
+        return [item[0] for item in reranked[:TOP_M_RRF]]
+
+    def process_query(self, query: str, history: list, session_id: str):
+        # 🚨 EXIT EARLY if no documents uploaded for THIS session
+        if session_id not in self.sessions:
+            return "Please upload documents for this session first.", [], True
+
+        standalone = get_standalone_query(query, history)
+        queries = generate_multi_queries(standalone, count=MULTI_QUERY_COUNT)
+        all_query_results = [self.hybrid_retrieval(q, session_id) for q in queries]
+        merged_candidates = self.rrf_merge(all_query_results)
+        
+        if not merged_candidates:
+            return "I don't have information in the provided documents.", [], False
+
+        # 3. Reranking with RELEVANCE THRESHOLD
+        pairs = [[standalone, c.page_content] for c in merged_candidates]
+        scores = self.rerank_model.predict(pairs)
+        
+        # Filter by score
+        # Adjustable based on model's sensitivity
+        #RELEVANCE_THRESHOLD = 0.5
+        
+        scored_results = sorted(zip(merged_candidates, scores), key=lambda x: x[1], reverse=True)
+        top_chunks = [item[0] for item in scored_results][:TOP_K_FINAL]
+
+        # if not top_chunks:
+        #     return "I am designed to assist you on relevant questions. Please ask within the context of the documents provided.", [], False
+
+        context = "\n\n".join([c.page_content for c in top_chunks])
+        answer = self.generate_answer(standalone, context, history)
+
+        sources = [{"text": c.page_content, "source": c.metadata.get("source")} for c in top_chunks]
         return answer, sources, False
 
+    def generate_answer(self, query: str, context: str, history: list):
+        system_prompt = """ROLE: You are a strict document assistant. Follow the RULES in every answer you generate.
+                            RULES:
+                            1. Use ONLY the provided Context to answer.
+                            2. If the user greets you, respond politely but do not retrieve documents.
+                            3. If the Context does not contain the answer, or the question is unrelated to the context, 
+                            state: "I am designed to assist you on relevant questions. Please ask within the context of the documents provided."
+                            4. Do NOT use your internal knowledge to answer general questions (e.g., about animals, food, music, films, sexual things, philosophy, general politics, physics, chemistry, mathemetics etc).
+                            5. Answer should not be long unnecessarily. 
+                            6. Avoid Unsupported claims that is if provided data does not give enough information to answer then do not give gibberish or forceful answers.
+                            """
+        messages = [{'role': 'system', 'content': system_prompt}] + history
+        messages.append({'role': 'user', 'content': f"Context:\n{context}\n\nQuestion: {query}"})
+        
+        response = ollama.chat(model=OLLAMA_MODEL, messages=messages)
+        return response['message']['content']
 
 rag_service = RAGService()
