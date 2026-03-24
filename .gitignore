@@ -1,0 +1,59 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# BACKEND (Python/FastAPI)
+backend/venv/
+backend/ENV/
+backend/env/
+backend/__pycache__/
+backend/*.py[cod]
+backend/$pyclassdir/
+
+# FAISS Index (Generated binary data - do not commit)
+backend/data/index/
+# Keep the folder structure but ignore contents (optional)
+!backend/data/index/.gitkeep
+
+# Uploaded files (User data - do not commit)
+backend/data/uploads/
+!backend/data/uploads/.gitkeep
+
+# FRONTEND
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.env.local
+frontend/.env.*.local
+
+# Next.js cache
+frontend/.vscode/
+frontend/.idea/
+
+# DOCUMENTS & DATA
+# *.pdf 
+# *.txt
