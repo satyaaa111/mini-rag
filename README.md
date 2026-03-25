@@ -8,10 +8,11 @@ A Retrieval-Augmented Generation (RAG) system built for any environment. This AI
 
 - [Features](#features)
 - [Tech Stack](#tech-stack)
+- [Configuration and Chunking Strategy](#configuration--Chunking-strategy)
 - [Project Structure](#project-structure)
 - [Setup Instructions](#setup-instructions)
 - [Grounding & Transparency](#grounding--transparency)
-- [Findings and Observations] (#findings--observations)
+- [Findings and Observations](#findings--observations)
 
 
 ---
@@ -42,7 +43,31 @@ A Retrieval-Augmented Generation (RAG) system built for any environment. This AI
 | **Frontend** | `Next.js` (JavaScript) | Modern UI, responsive, custom components |
 | **Text Splitter** | `RecursiveCharacterTextSplitter` | Preserves document structure during chunking |
 
+
 ---
+
+
+## Configuration and Chunking Strategy
+
+|  Variables  | Size |
+| :--- | :--- |
+| **CHUNK_SIZE** | 512 |
+| **CHUNK_OVERLAP**  | 60 |
+| **Chunks per query per method**  | 5 |
+| **Chunks after fusion**  | 15 |
+| **Chunks sent to LLM** | 4 |
+| **Number of Queries** | 3 |
+
+### Chunking Strategy
+
+In this RAG system, we implemented a Recursive Character Chunking strategy. This method is specifically chosen to handle the structured nature of construction documents, which often contain nested lists, technical specifications, and internal references.
+
+- **Hierarchical Splitting Logic**: The RecursiveCharacterTextSplitter attempts to split text using a hierarchy of characters (double newlines, single newlines, then spaces). This ensures that related information stays within the same context block.
+- **Optimal Chunk Size (512 Characters)**: A size of 512 characters is large enough to capture complete functional blocks, such as the full list of "Dedicated Team Touchpoints" or the complete "Partner Onboarding" quality gatekeeping steps
+- **Noise Reduction and Normalization**: During the ingestion phase, newlines are replaced with spaces to ensure the vector embeddings focus on the semantic content of the construction policies rather than the document's layout
+  
+---
+
 
 ## Project Structure
  Can be seen in the github itself
