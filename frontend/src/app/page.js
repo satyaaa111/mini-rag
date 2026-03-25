@@ -9,8 +9,7 @@ export default function Home() {
   const [sessionId, setSessionId] = useState("");
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
-  
-  // Ref for auto-scrolling to bottom
+
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -38,10 +37,8 @@ export default function Home() {
     setLoading(true);
     await axios.post("http://localhost:8000/reset-all");
     
-    // 1. Clear Messages
     setMessages([]);
-    
-    // 2. Clear File State (Makes upload button available again)
+
     setFile(null);
     
     // 3. Reset the File Input DOM element manually
@@ -66,7 +63,6 @@ export default function Home() {
     formData.append("file", file);
 
     try {
-      // ✅ Passing session_id in Headers
       await axios.post("http://localhost:8000/upload", formData, {
         headers: { "session-id": sessionId },
       });
@@ -87,8 +83,6 @@ export default function Home() {
     setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
     setQuery("");
-
-    // 🛑 Handle "quit" logic
     if (trimmedQuery.toLowerCase() === "quit") {
       try {
         await axios.post("http://localhost:8000/chat", 
@@ -111,9 +105,6 @@ export default function Home() {
         role: m.role,
         content: m.content,
       }));
-      // Map current messages to history format for the backend
-      //const history = messages.map((m) => ({ role: m.role, content: m.content }));
-      
       const res = await axios.post(
         "http://localhost:8000/chat",
         {

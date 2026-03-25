@@ -47,10 +47,7 @@ async def chat(request: ChatRequest, session_id: str = Header(None)):
             "sources": [], 
             "is_empty_state": False 
         }
-
-    # 3. Process the query
-    # Note: We use the history sent from the frontend (request.history) 
-    # to keep it stateless and consistent with your frontend logic.
+    # 3. Process the query through RAG Service
     answer, sources, is_empty = rag_service.process_query(
         request.query, 
         request.history, 

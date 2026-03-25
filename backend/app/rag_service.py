@@ -157,9 +157,7 @@ class RAGService:
         pairs = [[standalone, c.page_content] for c in merged_candidates]
         scores = self.rerank_model.predict(pairs)
         
-        # Filter by score
-        # Adjustable based on model's sensitivity
-        RELEVANCE_THRESHOLD = 0.08
+        #RELEVANCE_THRESHOLD = 0.08
         
         scored_results = sorted(zip(merged_candidates, scores), key=lambda x: x[1], reverse=True)
 
@@ -202,7 +200,6 @@ class RAGService:
         for folder in folders_to_clear:
             if os.path.exists(folder):
                 try:
-                    # Remove folder and recreate it empty
                     shutil.rmtree(folder)
                     os.makedirs(folder, exist_ok=True)
                 except Exception as e:
