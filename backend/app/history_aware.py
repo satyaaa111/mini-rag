@@ -20,7 +20,7 @@ def get_standalone_query(query: str, history: list):
     except:
         return query
 
-def generate_multi_queries(query: str, count: int = 3):
+def generate_multi_queries(query: str, count: int = 2):
     prompt = f"""Generate {count} different versions of the following user query to retrieve relevant documents from a vector database. 
     By generating multiple perspectives on the user query, your goal is to help the user overcome some of the limitations of distance-based similarity search.
     Provide these alternative queries separated by newlines.

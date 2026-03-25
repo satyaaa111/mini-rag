@@ -1,3 +1,5 @@
+from http.client import HTTPException
+
 from fastapi import FastAPI, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
 from .rag_service import rag_service
@@ -61,3 +63,16 @@ async def chat(request: ChatRequest, session_id: str = Header(None)):
         "sources": sources,
         "is_empty_state": is_empty
     }
+@app.post("/reset-all")
+async def reset_all():
+    try:
+        # Clear the RAG Service (FAISS + Sessions)
+        rag_service.reset_all_data()
+        
+        # Clear Global Chat History
+        global chat_histories
+        chat_histories = {}
+        
+        return {"message": "All data cleared successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

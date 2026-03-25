@@ -31,6 +31,19 @@ export default function Home() {
     });
   };
 
+  const handleGlobalReset = async () => {
+  if (!confirm("This will delete ALL uploaded documents and histories for EVERYONE. Continue?")) return;
+  
+  try {
+    await axios.post("http://localhost:8000/reset-all");
+    setMessages([]);
+    setSessionId(generateUUID()); // Start fresh with a new ID
+    alert("System Wiped: All documents and histories deleted.");
+  } catch (e) {
+    alert("Reset failed: " + e.message);
+  }
+};
+
   const handleUpload = async () => {
     if (!file) return;
     setUploading(true);
@@ -163,12 +176,20 @@ export default function Home() {
         <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200 mb-6">
           <div className="flex justify-between items-center mb-4">
              <h2 className="text-lg font-semibold text-slate-700">💬 Step 2: Chat</h2>
-             <button 
-                onClick={() => {setQuery("quit"); handleSend();}}
-                className="text-xs font-bold text-red-500 hover:text-red-700 uppercase"
-             >
-                Reset Session
-             </button>
+             <div className="flex justify-between gap-2">
+                <button 
+                  onClick={() => {setQuery("quit"); handleSend();}}
+                  className="bg-red-100 text-red-600 hover:bg-red-600 hover:text-white px-4 py-2 rounded-lg text-xs font-bold transition-all border border-red-200"
+              >
+                  Reset Session
+              </button>
+              <button
+                  onClick={handleGlobalReset}
+                  className="bg-red-100 text-red-600 hover:bg-red-600 hover:text-white px-4 py-2 rounded-lg text-xs font-bold transition-all border border-red-200"
+                >
+                  Erase all previous data
+                </button>
+             </div>
           </div>
           
           <div 

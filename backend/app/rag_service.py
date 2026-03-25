@@ -159,9 +159,16 @@ class RAGService:
         
         # Filter by score
         # Adjustable based on model's sensitivity
-        #RELEVANCE_THRESHOLD = 0.5
+        RELEVANCE_THRESHOLD = 0.08
         
         scored_results = sorted(zip(merged_candidates, scores), key=lambda x: x[1], reverse=True)
+
+        print("\n===== RERANK DEBUG =====")
+        for doc, score in scored_results[:4]:   # top 4
+            print(f"Score: {score:.4f}")
+            print(f"Text: {doc.page_content[:200]}")
+            print("------------------------")
+
         top_chunks = [item[0] for item in scored_results][:TOP_K_FINAL]
 
         # if not top_chunks:
@@ -189,5 +196,25 @@ class RAGService:
         
         response = ollama.chat(model=OLLAMA_MODEL, messages=messages)
         return response['message']['content']
+    
+    def reset_all_data(self):
+        """Wipes all persistent and in-memory data."""
+        # 1. Clear In-Memory Data
+        self.sessions = {}
+        self.vector_store = None
+        
+        # 2. Delete Persistent Folders
+        folders_to_clear = [DATA_INDEX, DATA_UPLOADS, DATA_RAW]
+        for folder in folders_to_clear:
+            if os.path.exists(folder):
+                try:
+                    # Remove folder and recreate it empty
+                    shutil.rmtree(folder)
+                    os.makedirs(folder, exist_ok=True)
+                except Exception as e:
+                    print(f"Error clearing {folder}: {e}")
+        
+        print("☢️ Global Data Reset Complete.")
+        return True
 
 rag_service = RAGService()
