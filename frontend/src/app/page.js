@@ -32,18 +32,33 @@ export default function Home() {
   };
 
   const handleGlobalReset = async () => {
-  if (!confirm("This will delete ALL uploaded documents and histories for EVERYONE. Continue?")) return;
+  if (!confirm("This will permanently delete ALL documents and history. Continue?")) return;
   
   try {
+    setLoading(true);
     await axios.post("http://localhost:8000/reset-all");
+    
+    // 1. Clear Messages
     setMessages([]);
-    setSessionId(generateUUID()); // Start fresh with a new ID
-    alert("System Wiped: All documents and histories deleted.");
+    
+    // 2. Clear File State (Makes upload button available again)
+    setFile(null);
+    
+    // 3. Reset the File Input DOM element manually
+    const fileInput = document.querySelector('input[type="file"]');
+    if (fileInput) fileInput.value = "";
+    
+    // 4. Generate a brand new Session ID
+    const newId = generateUUID();
+    setSessionId(newId);
+    
+    alert("System is fresh. You can upload new documents now.");
   } catch (e) {
-    alert("Reset failed: " + e.message);
+    alert("Error during reset: " + e.message);
+  } finally {
+    setLoading(false);
   }
 };
-
   const handleUpload = async () => {
     if (!file) return;
     setUploading(true);
@@ -194,7 +209,7 @@ export default function Home() {
           
           <div 
             ref={scrollRef}
-            className="h-[450px] overflow-y-auto border border-slate-100 rounded-lg p-4 mb-4 bg-slate-50 scroll-smooth"
+            className="h-112.5 overflow-y-auto border border-slate-100 rounded-lg p-4 mb-4 bg-slate-50 scroll-smooth"
           >
             {messages.length === 0 ? (
               <div className="text-center text-slate-400 mt-20 italic">
@@ -257,16 +272,6 @@ export default function Home() {
               Ask
             </button>
           </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex justify-between items-center px-2">
-            <div className="text-[10px] text-slate-400 font-mono">
-                ID: {sessionId}
-            </div>
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-              
-            </div>
         </div>
       </div>
     </div>
