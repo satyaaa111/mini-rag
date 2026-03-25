@@ -163,12 +163,6 @@ class RAGService:
         
         scored_results = sorted(zip(merged_candidates, scores), key=lambda x: x[1], reverse=True)
 
-        print("\n===== RERANK DEBUG =====")
-        for doc, score in scored_results[:4]:   # top 4
-            print(f"Score: {score:.4f}")
-            print(f"Text: {doc.page_content[:200]}")
-            print("------------------------")
-
         top_chunks = [item[0] for item in scored_results][:TOP_K_FINAL]
 
         # if not top_chunks:

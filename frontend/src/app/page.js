@@ -136,17 +136,17 @@ export default function Home() {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-extrabold text-slate-800 mb-2">
-            🏗️ Smart RAG Assistant
+            🏗️ Smart Assistant
           </h1>
           <p className="text-slate-600">
-            Hybrid Search (BM25 + Vector) • Multi-Query • Session Isolated
+            At you service for all your document-based queries. Upload, ask, and explore!
           </p>
         </div>
 
         {/* Upload Section */}
         <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200 mb-6">
           <h2 className="text-lg font-semibold text-slate-700 mb-4 flex items-center gap-2">
-            <span className="bg-blue-100 p-1 rounded">📁</span> Step 1: Upload Session Documents
+            <span className="bg-blue-100 p-1 rounded">📁</span>Upload Documents
           </h2>
           <div className="flex gap-4 items-center">
             <input
@@ -175,7 +175,7 @@ export default function Home() {
         {/* Chat Section */}
         <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200 mb-6">
           <div className="flex justify-between items-center mb-4">
-             <h2 className="text-lg font-semibold text-slate-700">💬 Step 2: Chat</h2>
+             <h2 className="text-lg font-semibold text-slate-700">Chat</h2>
              <div className="flex justify-between gap-2">
                 <button 
                   onClick={() => {setQuery("quit"); handleSend();}}
@@ -242,7 +242,7 @@ export default function Home() {
 
           <div className="flex gap-3">
             <input
-              className="flex-1 border border-slate-300 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              className="flex-1 text-black placeholder:text-gray-400 border border-slate-300 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSend()}
@@ -265,7 +265,7 @@ export default function Home() {
                 ID: {sessionId}
             </div>
             <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                Local RAG Engine v2.0
+              
             </div>
         </div>
       </div>
